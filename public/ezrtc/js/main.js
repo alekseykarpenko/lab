@@ -2,10 +2,19 @@ function main() {
   function message(text, type, stick) {
     type = type === null ? null : type || 'info'
     var delay = stick ? 0 : 5000
+    var details
+    if (typeof text === 'object') {
+      details = text.details
+      text = text.text
+    }
 
     var now = (window.performance.now() / 1000).toFixed(3);
-    console.log(now + ': ', text);
+    if (details) {
+      console.log(now + ': ', text, details);
+    } else {
+      console.log(now + ': ', text);
 
+    }
     if (type !== null) {
       var notify = $.notify({
           message: text
@@ -36,17 +45,18 @@ function main() {
 
   $formConnect.on('submit', function(e){
 
-    $formConnect.find('button').text('Connecting...').prop( "disabled", true )
+    $formConnect.find('button, input').text('Connecting...').prop( "disabled", true )
 
     message('Connecting to pairing server', null);
 
     setTimeout(function(){
-      message('Connected to pairing server. Waiting for other candidate...', 'warning', 'waitingCandidate');
+      message('Connected to pairing server. Waiting for remote candidate...', 'warning', 'waitingCandidate');
 
     }, 1000)
 
+    // TODO: websocket or long-polling with waiting for remote candidate
     setTimeout(function(){
-      message('Candidate connected', 'success')
+      message({text:'Remote andidate connected', details: window.candidate}, 'success')
       if (notifies['waitingCandidate']) notifies['waitingCandidate'].close()
     }, 4000)
 
