@@ -31,8 +31,8 @@ function onMessagePair(ws, message){
     if (partners.length > 1) {
       ws.send(JSON.stringify({type: 'full'}))
     } else {
-      partners[0].send(JSON.stringify({type: 'pair', mode: 'master', partnerId: ws.clientId}));
-      ws.send(JSON.stringify({type: 'pair', mode: 'slave', partnerId: partners[0].clientId}))
+      partners[0].send(JSON.stringify({type: 'pair', mode: 'master', partnerId: ws.clientId, reconnect: message.reconnect}));
+      ws.send(JSON.stringify({type: 'pair', mode: 'slave', partnerId: partners[0].clientId, reconnect: message.reconnect}))
     }
   }
 

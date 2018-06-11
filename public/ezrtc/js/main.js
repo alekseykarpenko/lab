@@ -37,6 +37,17 @@
       }
     }
   }
+  function closeNotification(id) {
+    if (id === 'all') {
+      for(var key in notifies) {
+        notifies[key].close()
+      }
+    } else {
+      if (notifies[id]) {
+        notifies[id].close()
+      }
+    }
+  }
   function uuidv4() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
@@ -57,14 +68,13 @@
     //room already have 2 peers -> disconnect
     trace('Room is full, please try another one.', 'danger')
     $formConnect.find('button, input').text('Connect').prop( "disabled", false )
-    if (notifies['waitingPartner']) notifies['waitingPartner'].close()
+    closeNotification('waitingPartner');
     signallingSocket.close(1000, 'Room is full')
   }
 
   function onSignallingPair(message){
     //remote partner connected, see message.mode = master/slave
-    trace('Remote partner connected', 'success')
-    if (notifies['waitingPartner']) notifies['waitingPartner'].close()
+    trace('Remote partner connected', (message.reconnect ? null : 'success'))
 
     partnerId = message.partnerId;
     isMaster = message.mode === 'master';
@@ -117,9 +127,9 @@
   }
 
   function onSignallingUnPair(message){
-    //Partner manually disconnected, let's do the same
-    trace('Session finished', 'warning');
-    disconnect();
+    //Partner manually disconnected, let's do the same (?)
+    trace('Remote partner manually disconnected', 'warning');
+    //disconnect();
   }
 
   function onIceCandidate(event) {
@@ -147,21 +157,23 @@
 
   function receiveChannelCallback(event) {
     trace('Receive Channel Callback');
-    dataChannel = event.channel;
-    dataChannel.onmessage = onReceiveMessageCallback;
-    dataChannel.onopen = onDataChannelStateChange;
-    dataChannel.onclose = onDataChannelStateChange;
+    if (dataChannel !== event.channel) {
+      dataChannel = event.channel;
+      dataChannel.onmessage = onReceiveMessageCallback;
+      dataChannel.onopen = onDataChannelStateChange;
+      dataChannel.onclose = onDataChannelStateChange;
+    }
   }
 
   function onDataChannelStateChange() {
     var readyState = dataChannel.readyState;
     if (readyState === 'open') {
       trace('Data channel state is: ' + readyState);
-      $formSend.find('button, textarea').prop( "disabled", false );
-      if (notifies['waitingPartner']) notifies['waitingPartner'].close()
+      $formSend.find('button[type=submit], textarea').prop( "disabled", false );
+      closeNotification('all');
     } else {
       trace('Data channel state is closed. Waiting for partner...', 'warning', 'waitingPartner');
-      $formSend.find('button, textarea').prop( "disabled", true );
+      $formSend.find('button[type=submit], textarea').prop( "disabled", true );
     }
   }
 
@@ -199,25 +211,23 @@
     }
   }
 
-  function connect() {
-    $formConnect.find('button, input').text('Connecting...').prop( "disabled", true )
-
-    roomId = $inputRoom.val();
+  function signallingConnect(data){
+    closeNotification('all');
+    trace({text: 'Connecting to pairing server with websocket', details: data});
 
     signallingSocket = new WebSocket((API_HTTPS ? 'wss' : 'ws') +'://'+API_HOST+'/api/connect');
 
-    var data = {type:'pair', clientId: clientId, roomId: roomId}
-    trace({text: 'Connecting to pairing server with websocket', details: data});
-
     signallingSocket.onopen = function(){
       trace('Connected to pairing server. Waiting for remote partner...', 'warning', 'waitingPartner');
+      closeNotification('waitingReconnect');
 
       signallingSocket.send(JSON.stringify(data));
     }
 
     signallingSocket.onmessage = function(e){
-      trace({text: 'Received message from pairing server', details: e.data});
       var message = JSON.parse(e.data)
+      trace({text: 'Received message from pairing server', details: message});
+
 
       switch (message.type) {
         case 'full':
@@ -245,13 +255,24 @@
 
     signallingSocket.onclose = function(e){
       if (!e.reason) {
-        trace('Signalling WebSocket was closed', 'warning')
+        trace({text: 'Signalling WebSocket was closed. Trying to reconnect...', details: e}, 'warning', 'waitingReconnect')
+
+        data.reconnect = true;
+        setTimeout(function(){signallingConnect(data)}, 3000);
       }
       $formConnect.find('button, input').text('Connect').prop( "disabled", false )
-      if (notifies['waitingPartner']) notifies['waitingPartner'].close()
+      closeNotification('waitingPartner');
     }
+  }
 
-    //TODO: handling of socket.onclose
+  function connect() {
+    $formConnect.find('button, input').text('Connecting...').prop( "disabled", true )
+
+    roomId = $inputRoom.val();
+
+
+    var data = {type:'pair', clientId: clientId, roomId: roomId}
+    signallingConnect(data);
   }
 
   function send() {
@@ -264,6 +285,7 @@
     signallingSocket.close(1000, 'Manually closed');
     $formSend.hide();
     $formConnect.show();
+    closeNotification('all');
   }
 
   var API_HTTPS = true,
