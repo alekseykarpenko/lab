@@ -41,6 +41,7 @@
     if (id === 'all') {
       for(var key in notifies) {
         notifies[key].close()
+        delete notifies[key]
       }
     } else {
       if (notifies[id]) {
@@ -79,13 +80,12 @@
     partnerId = message.partnerId;
     isMaster = message.mode === 'master';
 
-    //peerConnection.setRemoteDescription(new RTCSessionDescription(pair.description));
-
-    pair();
+    pair()
 
   }
   function onSignallingCandidate(message){
     //ICE candidate found -> addIceCandidate
+    console.log(peerConnection);
     peerConnection.addIceCandidate(message.data)
       .then(
         function() {
@@ -152,20 +152,19 @@
   }
 
   function onSessionDescriptionError(error) {
-    trace('Failed to create session description: ' + error.toString(), 'error');
+    trace('Failed to create session description: ' + error.toString(), 'danger');
   }
 
   function receiveChannelCallback(event) {
-    trace('Receive Channel Callback');
-    if (dataChannel !== event.channel) {
-      dataChannel = event.channel;
-      dataChannel.onmessage = onReceiveMessageCallback;
-      dataChannel.onopen = onDataChannelStateChange;
-      dataChannel.onclose = onDataChannelStateChange;
-    }
+    trace({text:'Created data channel from callback', details: event.channel});
+    dataChannel = event.channel;
+    dataChannel.onmessage = onReceiveMessageCallback;
+    dataChannel.onopen = onDataChannelStateChange;
+    dataChannel.onclose = onDataChannelStateChange;
   }
 
   function onDataChannelStateChange() {
+    if (!dataChannel) return;
     var readyState = dataChannel.readyState;
     if (readyState === 'open') {
       trace('Data channel state is: ' + readyState);
@@ -183,7 +182,7 @@
 
   function pair(){
     $formConnect.hide().find('button, input').text('Connect').prop( "disabled", false );
-    $formSend.show();
+    $formSend.show().find('button[type=submit], textarea').prop( "disabled", true );
 
     peerConnection =
       new RTCPeerConnection(PC_CONFIG, PC_CONSTRAINT);
@@ -196,7 +195,7 @@
     if (isMaster) {
       dataChannel = peerConnection.createDataChannel('sendDataChannel',
         DATA_CONSTRAINT);
-      trace('Created send data channel');
+      trace({text: 'Created data channel as master', details: dataChannel});
 
       dataChannel.onopen = onDataChannelStateChange;
       dataChannel.onclose = onDataChannelStateChange;
@@ -218,8 +217,9 @@
     signallingSocket = new WebSocket((API_HTTPS ? 'wss' : 'ws') +'://'+API_HOST+'/api/connect');
 
     signallingSocket.onopen = function(){
-      trace('Connected to pairing server. Waiting for remote partner...', 'warning', 'waitingPartner');
       closeNotification('waitingReconnect');
+
+      trace('Connected to pairing server. Waiting for remote partner...', 'warning', 'waitingPartner');
 
       signallingSocket.send(JSON.stringify(data));
     }
@@ -277,7 +277,7 @@
 
   function send() {
     var message = $inputMessage.val();
-    if (dataChannel.readyState === 'open') dataChannel.send(message);
+    if (dataChannel && dataChannel.readyState === 'open') dataChannel.send(message);
   }
 
   function disconnect(){
@@ -286,6 +286,12 @@
     $formSend.hide();
     $formConnect.show();
     closeNotification('all');
+    peerConnection = null;
+    signallingSocket = null;
+    dataChannel = null;
+    partnerId = null;
+    isMaster = null;
+
   }
 
   var API_HTTPS = true,
@@ -308,7 +314,8 @@
   var roomId,
     clientId = sessionStorage.getItem('clientId'),
     partnerId = null,
-    isMaster = null
+    isMaster = null,
+    isSafari = !!navigator.userAgent.match(/Version\/[\d\.]+.*Safari/)
 
 
   if (!clientId) {
@@ -318,7 +325,17 @@
 
   $(document).ready(function(){
     $formConnect.on('submit', function(e){
-      connect();
+      // HACK FOR SAFARI @see https://bugs.webkit.org/show_bug.cgi?id=173052
+      if (isSafari) {
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+          .then(function(stream) {
+            trace({text:'User granted access to audio/video', details: stream})
+
+            connect()
+          })
+      } else {
+        connect()
+      }
       e.preventDefault()
     })
     $formSend.on('submit', function(e){
