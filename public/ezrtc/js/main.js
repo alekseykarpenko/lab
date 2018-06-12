@@ -1,4 +1,8 @@
 (function($){
+  //
+  // Utility Functions
+  //
+
   function trace(text, notification, stick) {
     var delay = (stick || notification === 'error') ? 0 : 5000
     var details
@@ -37,6 +41,12 @@
       }
     }
   }
+  function uuidv4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
   function closeNotification(id) {
     if (id === 'all') {
       for(var key in notifies) {
@@ -49,23 +59,15 @@
       }
     }
   }
-  function uuidv4() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  }
-  function randomString(strLength) {
-    var result = [];
-    strLength = strLength || 5;
-    var charSet = '0123456789';
-    while (strLength--) {
-      result.push(charSet.charAt(Math.floor(Math.random() * charSet.length)));
-    }
-    return result.join('');
-  }
 
-  function onSignallingFull() {
+  //
+  // Signaling Events
+  // ------------------------------------
+
+  /**
+   * Remote room is full (should be only 2 peers)
+   */
+  function onRemoteFull() {
     //room already have 2 peers -> disconnect
     trace('Room is full, please try another one.', 'danger')
     $formConnect.find('button, input').text('Connect').prop( "disabled", false )
@@ -73,7 +75,11 @@
     signallingSocket.close(1000, 'Room is full')
   }
 
-  function onSignallingPair(message){
+  /**
+   * Remote partner connected
+   * @param message {{partnerId:{string},isMaster:{boolean},reconnect:{boolean}}}
+   */
+  function onRemotePair(message){
     //remote partner connected, see message.mode = master/slave
     trace('Remote partner connected', (message.reconnect ? null : 'success'))
 
@@ -81,11 +87,14 @@
     isMaster = message.mode === 'master';
 
     pair()
-
   }
-  function onSignallingCandidate(message){
+
+  /**
+   * New ICE Candidate delivered from the partner
+   * @param message
+   */
+  function onRemoteCandidate(message){
     //ICE candidate found -> addIceCandidate
-    console.log(peerConnection);
     peerConnection.addIceCandidate(message.data)
       .then(
         function() {
@@ -99,16 +108,11 @@
       message.data.candidate : '(null)'));
   }
 
-  function onAddIceCandidateSuccess() {
-    trace('AddIceCandidate success.');
-  }
-
-  function onAddIceCandidateError(error) {
-    trace('Failed to add Ice Candidate: ' + error.toString());
-  }
-
-  function onSignallingOffer(message){
-    //SDP offer from master -> createAnswer
+  /**
+   * SDP Offer from master (received if u're in slave mode)
+   * @param message
+   */
+  function onRemoteOffer(message){
     var description = new RTCSessionDescription(message.data)
 
     peerConnection.setRemoteDescription(description);
@@ -116,22 +120,35 @@
       onSessionDescription,
       onSessionDescriptionError
     );
-
   }
 
-  function onSignallingAnswer(message){
-    //SDP asnwer from slave
+  /**
+   * SDP Answer from slave (received if u're in master mode)
+   * @param message
+   */
+  function onRemoteAnswer(message){
     var description = new RTCSessionDescription(message.data)
 
     peerConnection.setRemoteDescription(description);
   }
 
-  function onSignallingUnPair(message){
-    //Partner manually disconnected, let's do the same (?)
+  /**
+   * Partner manually disconnected, let's do the same (?)
+   * @param message
+   */
+  function onRemoteUnPair(message){
     trace('Remote partner manually disconnected', 'warning');
     //disconnect();
   }
 
+  //
+  // WebRTC Events
+  //
+
+  /**
+   * New ICE Candidate should be send to the partner
+   * @param event {RTCPeerConnectionIceEvent}
+   */
   function onIceCandidate(event) {
     trace('Received ICE candidate: \n' + (event.candidate ?
       event.candidate.candidate : '(null)'));
@@ -141,6 +158,21 @@
     }
   }
 
+  /**
+   * Successfully added ICE candidate
+   */
+  function onAddIceCandidateSuccess() {
+    trace('AddIceCandidate success.');
+  }
+
+  function onAddIceCandidateError(error) {
+    trace('Failed to add Ice Candidate: ' + error.toString());
+  }
+
+  /**
+   * Successfully retrieved SDP
+   * @param description
+   */
   function onSessionDescription(description) {
     peerConnection.setLocalDescription(description);
     if (isMaster) {
@@ -155,15 +187,22 @@
     trace('Failed to create session description: ' + error.toString(), 'danger');
   }
 
-  function receiveChannelCallback(event) {
+  /**
+   * Data channel received from master (if u're in slave mode)
+   * @param event {RTCDataChannelEvent}
+   */
+  function onReceiveDataChannel(event) {
     trace({text:'Created data channel from callback', details: event.channel});
     dataChannel = event.channel;
-    dataChannel.onmessage = onReceiveMessageCallback;
-    dataChannel.onopen = onDataChannelStateChange;
-    dataChannel.onclose = onDataChannelStateChange;
+    dataChannel.onmessage = onReceiveMessage;
+    dataChannel.onopen = onChannelStateChange;
+    dataChannel.onclose = onChannelStateChange;
   }
 
-  function onDataChannelStateChange() {
+  /**
+   * Data Channel state changed (onopen/onclose)
+   */
+  function onChannelStateChange() {
     if (!dataChannel) return;
     var readyState = dataChannel.readyState;
     if (readyState === 'open') {
@@ -176,10 +215,21 @@
     }
   }
 
-  function onReceiveMessageCallback(event) {
+  /**
+   * Message received via RTCDataChannel
+   * @param event {MessageEvent}
+   */
+  function onReceiveMessage(event) {
     trace('Message: ' + event.data, 'info');
   }
 
+  //
+  // App Methods
+  //
+
+  /**
+   * Create p2p connection with RTCPeerConnection
+   */
   function pair(){
     $formConnect.hide().find('button, input').text('Connect').prop( "disabled", false );
     $formSend.show().find('button[type=submit], textarea').prop( "disabled", true );
@@ -197,20 +247,24 @@
         DATA_CONSTRAINT);
       trace({text: 'Created data channel as master', details: dataChannel});
 
-      dataChannel.onopen = onDataChannelStateChange;
-      dataChannel.onclose = onDataChannelStateChange;
-      dataChannel.onmessage = onReceiveMessageCallback;
+      dataChannel.onopen = onChannelStateChange;
+      dataChannel.onclose = onChannelStateChange;
+      dataChannel.onmessage = onReceiveMessage;
 
       peerConnection.createOffer().then(
         onSessionDescription,
         onSessionDescriptionError
       )
     } else {
-      peerConnection.ondatachannel = receiveChannelCallback;
+      peerConnection.ondatachannel = onReceiveDataChannel;
     }
   }
 
-  function signallingConnect(data){
+  /**
+   * Connect to signaling server with Websocket
+   * @param data
+   */
+  function signalingConnect(data){
     closeNotification('all');
     trace({text: 'Connecting to pairing server with websocket', details: data});
 
@@ -231,22 +285,22 @@
 
       switch (message.type) {
         case 'full':
-          onSignallingFull();
+          onRemoteFull();
           break;
         case 'pair':
-          onSignallingPair(message);
+          onRemotePair(message);
           break;
         case 'candidate':
-          onSignallingCandidate(message)
+          onRemoteCandidate(message)
           break;
         case 'offer':
-          onSignallingOffer(message);
+          onRemoteOffer(message);
           break;
         case 'answer':
-          onSignallingAnswer(message);
+          onRemoteAnswer(message);
           break;
         case 'unpair':
-          onSignallingUnPair(message);
+          onRemoteUnPair(message);
           break;
 
       }
@@ -258,13 +312,16 @@
         trace({text: 'Signalling WebSocket was closed. Trying to reconnect...', details: e}, 'warning', 'waitingReconnect')
 
         data.reconnect = true;
-        setTimeout(function(){signallingConnect(data)}, 3000);
+        setTimeout(function(){signalingConnect(data)}, 3000);
       }
       $formConnect.find('button, input').text('Connect').prop( "disabled", false )
       closeNotification('waitingPartner');
     }
   }
 
+  /**
+   * Start connection procedure
+   */
   function connect() {
     $formConnect.find('button, input').text('Connecting...').prop( "disabled", true )
 
@@ -272,14 +329,20 @@
 
 
     var data = {type:'pair', clientId: clientId, roomId: roomId}
-    signallingConnect(data);
+    signalingConnect(data);
   }
 
+  /**
+   * Send message through RTCDataChannel
+   */
   function send() {
     var message = $inputMessage.val();
     if (dataChannel && dataChannel.readyState === 'open') dataChannel.send(message);
   }
 
+  /**
+   * Manual disconnect with closing both signaling & p2p connections
+   */
   function disconnect(){
     peerConnection.close();
     signallingSocket.close(1000, 'Manually closed');
@@ -293,6 +356,10 @@
     isMaster = null;
 
   }
+
+  //
+  // Configuration and Variables
+  //
 
   var API_HTTPS = true,
       API_HOST = 'lab.alekseykarpenko.com',
@@ -316,7 +383,6 @@
     partnerId = null,
     isMaster = null,
     isSafari = !!navigator.userAgent.match(/Version\/[\d\.]+.*Safari/)
-
 
   if (!clientId) {
     clientId = uuidv4()
