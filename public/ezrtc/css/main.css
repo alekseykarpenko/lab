@@ -19,9 +19,6 @@ body {
     padding: 15px;
     margin: auto;
 }
-.form .checkbox {
-    font-weight: 400;
-}
 .form .form-control {
     position: relative;
     box-sizing: border-box;
@@ -32,8 +29,7 @@ body {
 .form .form-control:focus {
     z-index: 2;
 }
-.form input[type="text"],
-textarea {
+.form .input-group {
     margin-bottom: 10px;
 }
 .message {

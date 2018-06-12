@@ -37,6 +37,8 @@
         });
 
       if (typeof stick === 'string') {
+        if (notifies[stick]) notifies[stick].close();
+
         notifies[stick] = notify;
       }
     }
@@ -59,6 +61,15 @@
       }
     }
   }
+  function randomString(strLength) {
+    var result = [];
+    strLength = strLength || 5;
+    var charSet = '0123456789';
+    while (strLength--) {
+      result.push(charSet.charAt(Math.floor(Math.random() * charSet.length)));
+    }
+    return result.join('');
+  }
 
   //
   // Signaling Events
@@ -70,7 +81,7 @@
   function onRemoteFull() {
     //room already have 2 peers -> disconnect
     trace('Room is full, please try another one.', 'danger')
-    $formConnect.find('button, input').text('Connect').prop( "disabled", false )
+    $formConnect.find('button, input').prop( "disabled", false ).filter('[type=submit]').text('Connect');
     closeNotification('waitingPartner');
     signallingSocket.close(1000, 'Room is full')
   }
@@ -207,11 +218,11 @@
     var readyState = dataChannel.readyState;
     if (readyState === 'open') {
       trace('Data channel state is: ' + readyState);
-      $formSend.find('button[type=submit], textarea').prop( "disabled", false );
+      $formSend.find('button[type=submit], input').prop( "disabled", false );
       closeNotification('all');
     } else {
       trace('Data channel state is closed. Waiting for partner...', 'warning', 'waitingPartner');
-      $formSend.find('button[type=submit], textarea').prop( "disabled", true );
+      $formSend.find('button[type=submit], input').prop( "disabled", true );
     }
   }
 
@@ -231,8 +242,8 @@
    * Create p2p connection with RTCPeerConnection
    */
   function pair(){
-    $formConnect.hide().find('button, input').text('Connect').prop( "disabled", false );
-    $formSend.show().find('button[type=submit], textarea').prop( "disabled", true );
+    $formConnect.hide().find('button, input').prop( "disabled", false ).filter('[type=submit]').text('Connect');;
+    $formSend.show().find('button[type=submit], input').prop( "disabled", true );
 
     peerConnection =
       new RTCPeerConnection(PC_CONFIG, PC_CONSTRAINT);
@@ -314,7 +325,7 @@
         data.reconnect = true;
         setTimeout(function(){signalingConnect(data)}, 3000);
       }
-      $formConnect.find('button, input').text('Connect').prop( "disabled", false )
+      $formConnect.find('button, input').prop( "disabled", false ).filter('[type=submit]').text('Connect');
       closeNotification('waitingPartner');
     }
   }
@@ -323,7 +334,7 @@
    * Start connection procedure
    */
   function connect() {
-    $formConnect.find('button, input').text('Connecting...').prop( "disabled", true )
+    $formConnect.find('button, input').prop( "disabled", true ).filter('[type=submit]').text('Connecting...')
 
     roomId = $inputRoom.val();
 
@@ -335,9 +346,8 @@
   /**
    * Send message through RTCDataChannel
    */
-  function send() {
-    var message = $inputMessage.val();
-    if (dataChannel && dataChannel.readyState === 'open') dataChannel.send(message);
+  function send(message) {
+    if (dataChannel && dataChannel.readyState === 'open' && message) dataChannel.send(message);
   }
 
   /**
@@ -354,7 +364,6 @@
     dataChannel = null;
     partnerId = null;
     isMaster = null;
-
   }
 
   //
@@ -372,7 +381,8 @@
     $formSend = $('form[data-id="form-send"]'),
     $inputRoom = $('#inputRoom'),
     $inputMessage = $('#inputMessage'),
-    $disconnectButton = $('#disconnect');
+    $disconnectButton = $('#disconnect'),
+    $randomButton = $('#random');
 
   var notifies = {}
 
@@ -405,12 +415,16 @@
       e.preventDefault()
     })
     $formSend.on('submit', function(e){
-      send();
+      send($inputMessage.val());
+      $inputMessage.val('')
       e.preventDefault()
     })
     $disconnectButton.on('click', function() {
       signallingSocket.send(JSON.stringify({type: 'unpair'}))
       disconnect()
+    });
+    $randomButton.on('click', function() {
+      $inputRoom.val(randomString(6))
     });
   })
 

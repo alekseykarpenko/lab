@@ -19,18 +19,27 @@
 
 <form class="form" data-id="form-connect" autocomplete="off">
     <h1 class="h3 mb-3 font-weight-normal">WebRTC Connection</h1>
-    <label for="inputRoom" class="sr-only">Room ID</label>
-    <input type="text" id="inputRoom" class="form-control" placeholder="Room ID" required autofocus pattern="[0-9]{5,15}"
-           title="Room name must be 5-15 cyphers">
+    <div class="input-group mb-3">
+        <input type="text" id="inputRoom" class="form-control" placeholder="Room ID" required autofocus pattern="[0-9]{5,15}"
+               title="Room name must be 5-15 cyphers">
+        <div class="input-group-append">
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="random">Random</button>
+        </div>
+    </div>
+
     <button class="btn btn-lg btn-primary btn-block" type="submit">Connect</button>
 </form>
 
 <form class="form" style="display: none" data-id="form-send" autocomplete="off">
     <h1 class="h3 mb-3 font-weight-normal">Send data</h1>
-    <label for="inputMessage" class="sr-only">Message</label>
-    <textarea id="inputMessage" class="form-control" placeholder="Message" required autofocus></textarea>
-    <button class="btn btn-lg btn-success btn-block" type="submit">Send</button>
-    <button class="btn btn-md btn-secondary btn-block" id="disconnect">Disconnect</button>
+    <div class="input-group mb-3">
+        <input type="text" id="inputMessage" class="form-control" placeholder="Message" required autofocus>
+    </div>
+    <div class="btn-group d-flex" role="group" aria-label="First group">
+        <button class="btn btn-lg btn-success w-100" type="submit">Send</button>
+        <button class="btn btn-md btn-secondary w-80" id="disconnect">Disconnect</button>
+    </div>
+
 </form>
 
 <!-- Optional JavaScript -->
