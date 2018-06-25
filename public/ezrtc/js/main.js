@@ -245,7 +245,7 @@
     $formConnect.hide().find('button, input').prop( "disabled", false ).filter('[type=submit]').text('Connect');;
     $formSend.show().find('button[type=submit], input').prop( "disabled", true );
 
-    peerConnection =
+   window.peerConnection = peerConnection =
       new RTCPeerConnection(PC_CONFIG, PC_CONSTRAINT);
     trace('Created peer connection object peerConnection');
 
@@ -364,6 +364,7 @@
     dataChannel = null;
     partnerId = null;
     isMaster = null;
+    if (isSafari) mediaStream.getTracks()[0].stop();
   }
 
   //
@@ -386,7 +387,7 @@
 
   var notifies = {}
 
-  var peerConnection, signallingSocket, dataChannel
+  var peerConnection, signallingSocket, dataChannel, mediaStream;
 
   var roomId,
     clientId = sessionStorage.getItem('clientId'),
@@ -405,6 +406,7 @@
       if (isSafari) {
         navigator.mediaDevices.getUserMedia({ audio: true, video: false })
           .then(function(stream) {
+            mediaStream = stream;
             trace({text:'User granted access to audio/video', details: stream})
 
             connect()
